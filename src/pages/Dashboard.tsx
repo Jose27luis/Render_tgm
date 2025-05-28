@@ -91,17 +91,31 @@ const Dashboard = () => {
 
     const user = localStorage.getItem('user');
     if (user) {
-      const userData = JSON.parse(user);
-      setUserName(userData.nombre);
+      try {
+        const userData = JSON.parse(user);
+        if (userData && userData.nombre) {
+          setUserName(userData.nombre);
+        }
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        // If there's an error parsing the user data, remove it and fetch fresh data
+        localStorage.removeItem('user');
+      }
     }
 
     const fetchUserData = async () => {
       try {
         const response = await api.get('/user/profile');
-        setUserName(response.data.nombre);
-        localStorage.setItem('user', JSON.stringify(response.data));
+        if (response.data && response.data.nombre) {
+          setUserName(response.data.nombre);
+          localStorage.setItem('user', JSON.stringify(response.data));
+        }
       } catch (error) {
         console.error('Error al obtener datos del usuario:', error);
+        // If we can't fetch user data and have no valid stored data, redirect to login
+        if (!user) {
+          navigate('/login');
+        }
       }
     };
 

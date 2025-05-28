@@ -5,19 +5,62 @@ const { pool } = require('../config/database');
 const register = async (req, res) => {
   try {
     const { nombre, correo, contraseña } = req.body;
+    
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET no está definido');
+      return res.status(500).json({ message: 'Error en la configuración del servidor' });
+    }
+
     const hashedPassword = await bcrypt.hash(contraseña, 10);
+    
+    console.log('Intentando registrar usuario:', { nombre, correo });
     
     const [result] = await pool.execute(
       'INSERT INTO Usuario (nombre, correo, contraseña) VALUES (?, ?, ?)',
       [nombre, correo, hashedPassword]
     );
 
-    res.status(201).json({ 
-      message: 'Usuario registrado exitosamente',
-      userId: result.insertId 
-    });
+    console.log('Usuario insertado con ID:', result.insertId);
+
+    // Get the created user data
+    const [users] = await pool.execute(
+      'SELECT id_usuario, nombre, correo, rol FROM Usuario WHERE id_usuario = ?',
+      [result.insertId]
+    );
+
+    if (!users || users.length === 0) {
+      console.error('No se pudo obtener los datos del usuario después de la inserción');
+      return res.status(500).json({ message: 'Error al crear el usuario' });
+    }
+
+    const user = users[0];
+    console.log('Datos del usuario recuperados:', user);
+
+    // Create token for the new user
+    const token = jwt.sign(
+      { 
+        userId: user.id_usuario,
+        email: user.correo,
+        role: user.rol 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    const responseData = { 
+      token,
+      user: {
+        id: user.id_usuario,
+        nombre: user.nombre,
+        correo: user.correo,
+        rol: user.rol
+      }
+    };
+
+    console.log('Enviando respuesta:', responseData);
+    res.status(201).json(responseData);
   } catch (error) {
-    console.error(error);
+    console.error('Error completo:', error);
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(400).json({ message: 'El correo ya está registrado' });
     }

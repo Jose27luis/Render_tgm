@@ -47,3 +47,16 @@ CREATE TABLE Imagen (
     FOREIGN KEY (id_usuario) REFERENCES Usuario(id_usuario),
     FOREIGN KEY (id_resultado) REFERENCES Resultado(id_resultado)
 );
+
+-- Tabla: Amigos
+CREATE TABLE IF NOT EXISTS Amigos (
+    id_amistad INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT,
+    amigo_id INT,
+    estado ENUM('pendiente', 'aceptado', 'rechazado') DEFAULT 'pendiente',
+    fecha_solicitud TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES Usuario(id_usuario),
+    FOREIGN KEY (amigo_id) REFERENCES Usuario(id_usuario),
+    UNIQUE KEY unique_friendship (usuario_id, amigo_id)
+);

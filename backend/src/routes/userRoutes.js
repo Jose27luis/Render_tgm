@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const UserController = require('../controllers/userController');
+const FriendController = require('../controllers/friendController');
 const { authenticateToken } = require('../middlewares/auth');
 
 // Configuración de multer para subida de fotos de perfil
@@ -38,5 +39,13 @@ router.get('/profile', authenticateToken, (req, res) => UserController.getProfil
 router.put('/profile', authenticateToken, (req, res) => UserController.updateProfile(req, res));
 router.get('/images', authenticateToken, (req, res) => UserController.getUserImages(req, res));
 router.post('/profile/photo', authenticateToken, upload.single('photo'), (req, res) => UserController.updateProfilePhoto(req, res));
+
+// Rutas de amigos
+router.get('/search', authenticateToken, (req, res) => FriendController.searchUsers(req, res));
+router.get('/friends', authenticateToken, (req, res) => FriendController.getFriends(req, res));
+router.get('/friends/pending', authenticateToken, (req, res) => FriendController.getPendingRequests(req, res));
+router.post('/friends/request/:friendId', authenticateToken, (req, res) => FriendController.sendFriendRequest(req, res));
+router.post('/friends/accept/:friendId', authenticateToken, (req, res) => FriendController.acceptFriendRequest(req, res));
+router.post('/friends/reject/:friendId', authenticateToken, (req, res) => FriendController.rejectFriendRequest(req, res));
 
 module.exports = router; 

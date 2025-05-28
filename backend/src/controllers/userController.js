@@ -1,96 +1,115 @@
 const { pool } = require('../config/database');
-const bcrypt = require('bcrypt');
+const path = require('path');
+const fs = require('fs').promises;
 
-class UserController {
-  static async getProfile(req, res) {
-    try {
-      const [users] = await pool.execute(
-        'SELECT id_usuario, nombre, correo, rol, foto_perfil, fecha_registro FROM Usuario WHERE id_usuario = ?',
-        [req.user.userId]
-      );
+const getProfile = async (req, res) => {
+  try {
+    const [users] = await pool.execute(
+      'SELECT id_usuario, nombre, correo, rol FROM Usuario WHERE id_usuario = ?',
+      [req.user.userId]
+    );
 
-      if (users.length === 0) {
-        return res.status(404).json({ message: 'Usuario no encontrado' });
-      }
-
-      // Obtener las imágenes del usuario
-      const [imagenes] = await pool.execute(
-        `SELECT i.*, r.porcentaje_precision, r.fecha_proceso 
-         FROM Imagen i 
-         LEFT JOIN Resultado r ON i.id_resultado = r.id_resultado 
-         WHERE i.id_usuario = ?`,
-        [req.user.userId]
-      );
-
-      const user = users[0];
-      user.imagenes = imagenes;
-
-      res.json(user);
-    } catch (error) {
-      console.error('Error al obtener perfil:', error);
-      res.status(500).json({ message: 'Error al obtener perfil' });
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
     }
-  }
 
-  static async updateProfile(req, res) {
+    const user = users[0];
+    res.json({
+      id: user.id_usuario,
+      nombre: user.nombre,
+      correo: user.correo,
+      rol: user.rol,
+      foto_perfil: null // Temporalmente null hasta que se agregue la columna
+    });
+  } catch (error) {
+    console.error('Error al obtener perfil:', error);
+    res.status(500).json({ message: 'Error al obtener datos del perfil' });
+  }
+};
+
+const updateProfile = async (req, res) => {
+  try {
     const { nombre, correo } = req.body;
+    
+    // Verificar si el correo ya está en uso por otro usuario
+    const [existingUsers] = await pool.execute(
+      'SELECT id_usuario FROM Usuario WHERE correo = ? AND id_usuario != ?',
+      [correo, req.user.userId]
+    );
 
-    try {
-      await pool.execute(
-        'UPDATE Usuario SET nombre = ?, correo = ? WHERE id_usuario = ?',
-        [nombre, correo, req.user.userId]
-      );
-
-      res.json({ message: 'Perfil actualizado exitosamente' });
-    } catch (error) {
-      console.error('Error al actualizar perfil:', error);
-      if (error.code === 'ER_DUP_ENTRY') {
-        return res.status(400).json({ message: 'El correo ya está en uso' });
-      }
-      res.status(500).json({ message: 'Error en el servidor' });
+    if (existingUsers.length > 0) {
+      return res.status(400).json({ message: 'El correo ya está en uso' });
     }
-  }
 
-  static async updateProfilePhoto(req, res) {
+    await pool.execute(
+      'UPDATE Usuario SET nombre = ?, correo = ? WHERE id_usuario = ?',
+      [nombre, correo, req.user.userId]
+    );
+
+    res.json({ message: 'Perfil actualizado correctamente' });
+  } catch (error) {
+    console.error('Error al actualizar perfil:', error);
+    res.status(500).json({ message: 'Error al actualizar el perfil' });
+  }
+};
+
+const updateProfilePhoto = async (req, res) => {
+  try {
     if (!req.file) {
-      return res.status(400).json({ message: 'No se ha proporcionado ninguna imagen' });
+      return res.status(400).json({ message: 'No se ha subido ninguna imagen' });
     }
 
-    try {
-      const photoUrl = `/uploads/profile/${req.file.filename}`;
-      
-      await pool.execute(
-        'UPDATE Usuario SET foto_perfil = ? WHERE id_usuario = ?',
-        [photoUrl, req.user.userId]
-      );
+    const photoUrl = `/uploads/profile/${req.file.filename}`;
+    
+    // Obtener la foto anterior para borrarla
+    const [users] = await pool.execute(
+      'SELECT foto_perfil FROM Usuario WHERE id_usuario = ?',
+      [req.user.userId]
+    );
 
-      res.json({ 
-        message: 'Foto de perfil actualizada exitosamente',
-        photoUrl 
-      });
-    } catch (error) {
-      console.error('Error al actualizar la foto de perfil:', error);
-      res.status(500).json({ message: 'Error al actualizar la foto de perfil' });
+    // Actualizar la foto en la base de datos
+    await pool.execute(
+      'UPDATE Usuario SET foto_perfil = ? WHERE id_usuario = ?',
+      [photoUrl, req.user.userId]
+    );
+
+    // Si había una foto anterior, intentar borrarla
+    if (users[0]?.foto_perfil) {
+      const oldPhotoPath = path.join(__dirname, '../../', users[0].foto_perfil);
+      try {
+        await fs.unlink(oldPhotoPath);
+      } catch (err) {
+        console.error('Error al borrar foto anterior:', err);
+      }
     }
+
+    res.json({ 
+      message: 'Foto de perfil actualizada',
+      foto_url: photoUrl
+    });
+  } catch (error) {
+    console.error('Error al actualizar foto:', error);
+    res.status(500).json({ message: 'Error al actualizar la foto de perfil' });
   }
+};
 
-  static async getUserImages(req, res) {
-    try {
-      const [imagenes] = await pool.execute(
-        `SELECT i.*, r.porcentaje_precision, r.fecha_proceso, r.ruta_resultado
-         FROM Imagen i 
-         LEFT JOIN Resultado r ON i.id_resultado = r.id_resultado 
-         WHERE i.id_usuario = ?
-         ORDER BY i.fecha_subida DESC`,
-        [req.user.userId]
-      );
+const getUserImages = async (req, res) => {
+  try {
+    const [images] = await pool.execute(
+      'SELECT * FROM Imagenes WHERE usuario_id = ? ORDER BY fecha_subida DESC',
+      [req.user.userId]
+    );
 
-      res.json(imagenes);
-    } catch (error) {
-      console.error('Error al obtener imágenes del usuario:', error);
-      res.status(500).json({ message: 'Error al obtener imágenes del usuario' });
-    }
+    res.json(images);
+  } catch (error) {
+    console.error('Error al obtener imágenes:', error);
+    res.status(500).json({ message: 'Error al obtener las imágenes' });
   }
-}
+};
 
-module.exports = UserController; 
+module.exports = {
+  getProfile,
+  updateProfile,
+  updateProfilePhoto,
+  getUserImages
+}; 
