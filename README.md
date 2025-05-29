@@ -2,6 +2,12 @@
 
 Aplicación web para el procesamiento y mejora de imágenes y videos utilizando inteligencia artificial.
 
+## 👥 Autores
+
+- Daniel Montufar
+- Jose Teco
+- Carlos Garcia
+
 ## 📋 Tabla de Contenidos
 
 - [Características](#características)
@@ -17,21 +23,25 @@ Aplicación web para el procesamiento y mejora de imágenes y videos utilizando 
 
 ## ✨ Características
 
-- Autenticación de usuarios
+- Sistema de autenticación robusto
+- Gestión de roles (usuario, admin, superadmin)
+- Sistema de amigos y gestión de conexiones sociales
 - Procesamiento de imágenes y videos
 - Interfaz moderna con diseño glassmórfico
-- Animaciones fluidas
-- Diseño responsivo
-- Carruseles interactivos
-- Carga y procesamiento de archivos
-- Panel de control personalizado
+- Animaciones fluidas con Framer Motion
+- Diseño responsivo y adaptable
+- Panel de administración avanzado
+- Gestión de perfiles de usuario
+- Sistema de solicitudes de rol admin
+- Carga y gestión de imágenes de perfil
+- Notificaciones en tiempo real
 
 ## 🛠️ Tecnologías Utilizadas
 
 ### Frontend
 - React 18
 - TypeScript
-- Material-UI (MUI)
+- Material-UI (MUI) v5
 - Framer Motion
 - Formik & Yup
 - Axios
@@ -41,10 +51,10 @@ Aplicación web para el procesamiento y mejora de imágenes y videos utilizando 
 - Node.js
 - Express
 - MySQL
-- JWT
-- Bcrypt
+- JWT para autenticación
+- Bcrypt para encriptación
 - CORS
-- Multer
+- Multer para manejo de archivos
 
 ## 📁 Estructura del Proyecto
 
@@ -54,6 +64,9 @@ proyecto-web/
 │   ├── src/
 │   │   ├── assets/
 │   │   ├── components/
+│   │   │   ├── FriendsManager/
+│   │   │   ├── Navigation/
+│   │   │   └── UI/
 │   │   ├── config/
 │   │   ├── pages/
 │   │   ├── styles/
@@ -65,10 +78,14 @@ proyecto-web/
 │   ├── src/
 │   │   ├── config/
 │   │   ├── controllers/
+│   │   │   ├── userController.js
+│   │   │   ├── authController.js
+│   │   │   └── friendController.js
 │   │   ├── middleware/
-│   │   ├── models/
 │   │   ├── routes/
 │   │   └── app.js
+│   ├── uploads/
+│   │   └── profile/
 │   ├── package.json
 │   └── .env
 │
@@ -125,10 +142,9 @@ JWT_SECRET=tu_secreto_jwt
 CREATE DATABASE render_tgm;
 ```
 
-2. Ejecutar las migraciones:
-```bash
-cd backend
-npm run migrate
+2. Ejecutar el script de base de datos:
+```sql
+source database.sql
 ```
 
 ## 💻 Uso
@@ -154,81 +170,92 @@ npm run dev
 ### Autenticación
 
 ```
-POST /api/auth/register
-POST /api/auth/login
-GET /api/auth/profile
+POST /api/auth/register - Registro de usuarios
+POST /api/auth/login - Inicio de sesión
+GET /api/auth/verify - Verificación de token
 ```
 
 ### Usuarios
 
 ```
-GET /api/users/profile
-PUT /api/users/profile
+GET /api/user/profile - Obtener perfil
+PUT /api/user/profile - Actualizar perfil
+POST /api/user/profile/photo - Actualizar foto de perfil
+GET /api/user/list - Listar usuarios (admin)
 ```
 
-### Archivos
+### Amigos
 
 ```
-POST /api/files/upload
-GET /api/files/list
-DELETE /api/files/:id
+GET /api/user/friends - Listar amigos
+POST /api/user/friends/request/:friendId - Enviar solicitud
+POST /api/user/friends/accept/:friendId - Aceptar solicitud
+POST /api/user/friends/reject/:friendId - Rechazar solicitud
+GET /api/user/friends/pending - Ver solicitudes pendientes
 ```
 
-### Procesamiento
+### Administración
 
 ```
-POST /api/process/image
-POST /api/process/video
-GET /api/process/status/:id
+POST /api/admin/request - Solicitar rol admin
+GET /api/admin/pending - Ver solicitudes pendientes
+PUT /api/admin/handle - Manejar solicitudes
+GET /api/admin/list - Listar administradores
+DELETE /api/admin/remove/:adminId - Remover admin
 ```
 
-## 🎨 Componentes Frontend
+## 🔒 Roles y Permisos
 
-### Páginas Principales
+El sistema implementa tres niveles de roles:
 
-1. **Home (`/src/pages/Home.tsx`)**
-   - Página de inicio con carruseles interactivos
-   - Sección de características
-   - Información de contacto
+1. **Usuario**
+   - Gestión de perfil básico
+   - Sistema de amigos
+   - Solicitud de rol admin
 
-2. **Login (`/src/pages/Login.tsx`)**
-   - Formulario de inicio de sesión
-   - Validación de campos
-   - Manejo de errores
+2. **Admin**
+   - Todo lo anterior
+   - Ver lista de usuarios
+   - Gestionar solicitudes admin
 
-3. **Register (`/src/pages/Register.tsx`)**
-   - Formulario de registro
-   - Validación de datos
-   - Feedback visual
+3. **Superadmin**
+   - Todo lo anterior
+   - Gestión completa de administradores
+   - Remover administradores
 
-4. **Dashboard (`/src/pages/Dashboard.tsx`)**
-   - Panel de control del usuario
-   - Estadísticas
-   - Carga de archivos
+## 🎨 Características de la Interfaz
 
-### Componentes Reutilizables
+- Diseño glassmórfico moderno
+- Temas oscuros con efectos de transparencia
+- Animaciones suaves y responsivas
+- Formularios validados
+- Notificaciones toast
+- Modales interactivos
+- Navegación fluida
+- Carga progresiva de contenido
+- Gestión de estados loading
+- Manejo de errores amigable
 
-1. **BackgroundShapes**
-   - Formas animadas de fondo
-   - Efectos de gradiente
-   - Animaciones con Framer Motion
+## 📱 Responsive Design
 
-2. **Carruseles**
-   - Primer carrusel: Pantalla completa con fade
-   - Segundo carrusel: Estilo moderno con deslizamiento
+La aplicación está completamente optimizada para:
+- Dispositivos móviles
+- Tablets
+- Escritorio
+- Pantallas grandes
 
-3. **Formularios**
-   - Campos con validación
-   - Feedback visual
-   - Integración con Formik
+## 🔄 Estado Actual
 
-## 🔒 Seguridad
-
-- Autenticación mediante JWT
-- Contraseñas hasheadas con bcrypt
-- Validación de datos en frontend y backend
-- Protección contra CSRF
-- Manejo seguro de archivos
+El proyecto se encuentra en desarrollo activo con las siguientes características implementadas:
+- ✅ Sistema de autenticación completo
+- ✅ Gestión de roles y permisos
+- ✅ Sistema de amigos
+- ✅ Gestión de perfiles
+- ✅ Panel de administración
+- ✅ Carga de imágenes
+- ⏳ Procesamiento de imágenes (en desarrollo)
+- ⏳ Chat en tiempo real (planificado)
+- ⏳ Notificaciones push (planificado)
 
 ## 🤝 Contribución
 
@@ -241,10 +268,6 @@ GET /api/process/status/:id
 ## 📄 Licencia
 
 Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE.md](LICENSE.md) para más detalles.
-
-## 👥 Autores
-
-- **Tu Nombre** - *Trabajo Inicial* - [TuUsuario](https://github.com/tuusuario)
 
 ## 🙏 Agradecimientos
 
