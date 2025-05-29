@@ -5,7 +5,7 @@ const fs = require('fs').promises;
 const getProfile = async (req, res) => {
   try {
     const [users] = await pool.execute(
-      'SELECT id_usuario, nombre, correo, rol FROM Usuario WHERE id_usuario = ?',
+      'SELECT id_usuario, nombre, correo, rol, foto_perfil, fecha_registro FROM Usuario WHERE id_usuario = ?',
       [req.user.userId]
     );
 
@@ -19,7 +19,8 @@ const getProfile = async (req, res) => {
       nombre: user.nombre,
       correo: user.correo,
       rol: user.rol,
-      foto_perfil: null // Temporalmente null hasta que se agregue la columna
+      foto_perfil: user.foto_perfil ? `/uploads/profile/${user.foto_perfil}` : null,
+      fecha_registro: user.fecha_registro
     });
   } catch (error) {
     console.error('Error al obtener perfil:', error);
@@ -59,7 +60,8 @@ const updateProfilePhoto = async (req, res) => {
       return res.status(400).json({ message: 'No se ha subido ninguna imagen' });
     }
 
-    const photoUrl = `/uploads/profile/${req.file.filename}`;
+    // Guardar solo el nombre del archivo en la base de datos
+    const fileName = req.file.filename;
     
     // Obtener la foto anterior para borrarla
     const [users] = await pool.execute(
@@ -70,26 +72,31 @@ const updateProfilePhoto = async (req, res) => {
     // Actualizar la foto en la base de datos
     await pool.execute(
       'UPDATE Usuario SET foto_perfil = ? WHERE id_usuario = ?',
-      [photoUrl, req.user.userId]
+      [fileName, req.user.userId]
     );
 
     // Si había una foto anterior, intentar borrarla
     if (users[0]?.foto_perfil) {
-      const oldPhotoPath = path.join(__dirname, '../../', users[0].foto_perfil);
       try {
+        const oldPhotoPath = path.join(__dirname, '../../uploads/profile', users[0].foto_perfil);
+        await fs.access(oldPhotoPath);
         await fs.unlink(oldPhotoPath);
       } catch (err) {
-        console.error('Error al borrar foto anterior:', err);
+        console.error('Error o archivo no encontrado al borrar foto anterior:', err);
+        // No devolvemos error ya que la actualización fue exitosa
       }
     }
 
     res.json({ 
       message: 'Foto de perfil actualizada',
-      foto_url: photoUrl
+      foto_url: `/uploads/profile/${fileName}`
     });
   } catch (error) {
     console.error('Error al actualizar foto:', error);
-    res.status(500).json({ message: 'Error al actualizar la foto de perfil' });
+    res.status(500).json({ 
+      message: 'Error al actualizar la foto de perfil',
+      error: error.message 
+    });
   }
 };
 
@@ -107,9 +114,23 @@ const getUserImages = async (req, res) => {
   }
 };
 
+const getAllUsers = async (req, res) => {
+  try {
+    const [users] = await pool.execute(
+      'SELECT id_usuario, nombre, correo, rol, fecha_registro FROM Usuario ORDER BY fecha_registro DESC'
+    );
+
+    res.json(users);
+  } catch (error) {
+    console.error('Error al obtener lista de usuarios:', error);
+    res.status(500).json({ message: 'Error al obtener la lista de usuarios' });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   updateProfilePhoto,
-  getUserImages
+  getUserImages,
+  getAllUsers
 }; 

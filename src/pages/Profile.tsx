@@ -19,6 +19,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
@@ -33,16 +37,28 @@ import LockIcon from '@mui/icons-material/Lock';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SendIcon from '@mui/icons-material/Send';
-import api from '../config/api';
+import api, { SERVER_URL } from '../config/api';
 import FriendsManager from '../components/FriendsManager';
+
+type UserRole = 'usuario' | 'admin' | 'superadmin';
 
 interface UserData {
   id: number;
   nombre: string;
   correo: string;
-  rol: string;
+  rol: UserRole;
   foto_perfil?: string;
   fecha_registro?: string;
+}
+
+// Interfaz para las solicitudes de admin
+interface AdminRequest {
+  id_solicitud: number;
+  usuario_id: number;
+  nombre: string;
+  correo: string;
+  razon: string;
+  fecha_solicitud: string;
 }
 
 // Componente para las figuras de fondo mejorado
@@ -123,6 +139,16 @@ const BackgroundShapes = () => (
   </>
 );
 
+// Función auxiliar para verificar el rol
+const hasRole = (userRole: string | undefined, role: UserRole): boolean => {
+  return userRole === role;
+};
+
+// Función auxiliar para verificar si es admin o superadmin
+const isAdminOrSuperadmin = (userRole: string | undefined): boolean => {
+  return userRole === 'admin' || userRole === 'superadmin';
+};
+
 const Profile = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -141,14 +167,23 @@ const Profile = () => {
   });
   const [openAdminRequest, setOpenAdminRequest] = useState(false);
   const [adminRequestReason, setAdminRequestReason] = useState('');
+  const [adminRequests, setAdminRequests] = useState<AdminRequest[]>([]);
+  const [showAdminRequests, setShowAdminRequests] = useState(false);
+  const [adminList, setAdminList] = useState<Array<{id_usuario: number, nombre: string, correo: string, fecha_registro: string}>>([]);
+  const [usersList, setUsersList] = useState<Array<{id_usuario: number, nombre: string, correo: string, rol: string}>>([]);
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
         const response = await api.get('/user/profile');
-        setUserData(response.data);
-        setEditData(response.data);
-      } catch (error) {
+        const userData = {
+          ...response.data,
+          foto_perfil: response.data.foto_perfil ? `${SERVER_URL}${response.data.foto_perfil}` : null
+        };
+        setUserData(userData);
+        setEditData(userData);
+        console.log('Datos del perfil cargados:', userData);
+      } catch (error: any) {
         console.error('Error al cargar el perfil:', error);
         setError('Error al cargar los datos del perfil');
         if (error.response?.status === 401) {
@@ -170,15 +205,13 @@ const Profile = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validar el tipo de archivo
     if (!file.type.startsWith('image/')) {
       setError('Por favor, selecciona un archivo de imagen válido');
       return;
     }
 
-    // Validar el tamaño del archivo (máximo 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError('La imagen no debe superar los 5MB');
+    if (file.size > 2 * 1024 * 1024) {
+      setError('La imagen no debe superar los 2MB');
       return;
     }
 
@@ -193,10 +226,13 @@ const Profile = () => {
         },
       });
 
-      setUserData(prev => prev ? { ...prev, foto_perfil: response.data.foto_url } : null);
+      const imageUrl = `${SERVER_URL}${response.data.foto_url}`;
+      setUserData(prev => prev ? { ...prev, foto_perfil: imageUrl } : null);
       setSuccess('Foto de perfil actualizada correctamente');
-    } catch (err) {
-      setError('Error al actualizar la foto de perfil');
+      console.log('Foto actualizada:', imageUrl);
+    } catch (err: any) {
+      console.error('Error al subir la foto:', err);
+      setError(err.response?.data?.message || 'Error al actualizar la foto de perfil');
     } finally {
       setIsUploading(false);
     }
@@ -267,13 +303,172 @@ const Profile = () => {
 
   const handleAdminRequest = async () => {
     try {
-      await api.post('/user/admin-request', { reason: adminRequestReason });
+      await api.post('/admin/request', { reason: adminRequestReason });
       setSuccess('Solicitud enviada correctamente');
       setOpenAdminRequest(false);
       setAdminRequestReason('');
-    } catch (error) {
-      setError('Error al enviar la solicitud');
+    } catch (error: any) {
+      setError(error.response?.data?.message || 'Error al enviar la solicitud');
     }
+  };
+
+  // Función para cargar las solicitudes pendientes
+  const fetchAdminRequests = async () => {
+    try {
+      const response = await api.get('/admin/pending');
+      console.log('Respuesta de solicitudes admin:', response.data);
+      setAdminRequests(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error al cargar solicitudes:', error);
+      setAdminRequests([]);
+    }
+  };
+
+  // Función para cargar la lista de administradores
+  const fetchAdminList = async () => {
+    if (hasRole(userData?.rol, 'superadmin')) {
+      try {
+        const response = await api.get('/admin/list');
+        setAdminList(response.data);
+      } catch (error) {
+        console.error('Error al cargar lista de administradores:', error);
+      }
+    }
+  };
+
+  // Cargar solicitudes y lista de admins cuando cambia el rol
+  useEffect(() => {
+    if (isAdminOrSuperadmin(userData?.rol)) {
+      fetchAdminRequests();
+    }
+    if (hasRole(userData?.rol, 'superadmin')) {
+      fetchAdminList();
+    }
+  }, [userData?.rol]);
+
+  // Función para remover un administrador
+  const handleRemoveAdmin = async (adminId: number) => {
+    try {
+      await api.delete(`/admin/remove/${adminId}`);
+      setSuccess('Administrador removido correctamente');
+      fetchAdminList(); // Actualizar la lista
+    } catch (error: any) {
+      setError(error.response?.data?.message || 'Error al remover administrador');
+    }
+  };
+
+  // Función para manejar las solicitudes
+  const handleRequestAction = async (requestId: number, action: 'aprobada' | 'rechazada') => {
+    try {
+      await api.put('/admin/handle', { requestId, action });
+      setSuccess(`Solicitud ${action} correctamente`);
+      fetchAdminRequests(); // Recargar la lista
+    } catch (error) {
+      setError('Error al procesar la solicitud');
+    }
+  };
+
+  // Agregar función para obtener la lista de usuarios
+  const fetchUsersList = async () => {
+    if (isAdminOrSuperadmin(userData?.rol)) {
+      try {
+        const response = await api.get('/user/list');
+        setUsersList(response.data);
+      } catch (error) {
+        console.error('Error al cargar lista de usuarios:', error);
+      }
+    }
+  };
+
+  // Agregar useEffect para cargar usuarios
+  useEffect(() => {
+    if (isAdminOrSuperadmin(userData?.rol)) {
+      fetchUsersList();
+    }
+  }, [userData?.rol]);
+
+  // Agregar función para renderizar la sección de usuarios
+  const renderUsersSection = () => {
+    if (isAdminOrSuperadmin(userData?.rol)) {
+      return (
+        <Paper
+          elevation={3}
+          sx={{
+            p: 3,
+            background: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: 2,
+            mb: 3
+          }}
+        >
+          <Typography
+            variant="h6"
+            sx={{
+              color: 'white',
+              mb: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+            }}
+          >
+            <PersonIcon /> Gestión de Usuarios
+          </Typography>
+          
+          <List sx={{ 
+            bgcolor: 'rgba(255, 255, 255, 0.05)', 
+            borderRadius: 1,
+            maxHeight: '300px',
+            overflow: 'auto'
+          }}>
+            {usersList.length === 0 ? (
+              <ListItem>
+                <ListItemText
+                  primary="No hay usuarios registrados"
+                  sx={{ color: 'white' }}
+                />
+              </ListItem>
+            ) : (
+              usersList.map((user) => (
+                <ListItem key={user.id_usuario}>
+                  <ListItemText
+                    primary={
+                      <Typography component="span" color="white">
+                        {user.nombre}
+                      </Typography>
+                    }
+                    secondary={
+                      <>
+                        <Typography component="span" color="rgba(255, 255, 255, 0.7)" variant="body2">
+                          {user.correo}
+                        </Typography>
+                        <Typography 
+                          component="span"
+                          color="rgba(255, 255, 255, 0.7)" 
+                          variant="body2"
+                          sx={{
+                            display: 'inline-block',
+                            bgcolor: 'rgba(255, 255, 255, 0.1)',
+                            px: 1,
+                            py: 0.5,
+                            borderRadius: 1,
+                            mt: 0.5
+                          }}
+                        >
+                          {user.rol.charAt(0).toUpperCase() + user.rol.slice(1)}
+                        </Typography>
+                      </>
+                    }
+                  />
+                </ListItem>
+              ))
+            )}
+          </List>
+        </Paper>
+      );
+    }
+    return null;
   };
 
   if (isLoading) {
@@ -293,6 +488,157 @@ const Profile = () => {
     );
   }
 
+  // Renderizar sección de solicitudes de admin
+  const renderAdminRequestsSection = () => {
+    if (isAdminOrSuperadmin(userData?.rol)) {
+      return (
+        <Paper
+          elevation={3}
+          sx={{
+            p: 3,
+            background: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: 2,
+            mb: 3
+          }}
+        >
+          <Typography
+            variant="h6"
+            sx={{
+              color: 'white',
+              mb: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+            }}
+          >
+            <AdminPanelSettingsIcon /> Solicitudes de Administrador
+          </Typography>
+          
+          <List sx={{ bgcolor: 'rgba(255, 255, 255, 0.05)', borderRadius: 1 }}>
+            {!Array.isArray(adminRequests) || adminRequests.length === 0 ? (
+              <ListItem>
+                <ListItemText 
+                  primary="No hay solicitudes pendientes"
+                  sx={{ color: 'white' }}
+                />
+              </ListItem>
+            ) : (
+              adminRequests.map((request) => (
+                <ListItem key={request.id_solicitud}>
+                  <ListItemText
+                    primary={
+                      <Typography color="white">
+                        {request.nombre} ({request.correo})
+                      </Typography>
+                    }
+                    secondary={
+                      <Typography color="rgba(255, 255, 255, 0.7)" variant="body2">
+                        {request.razon}
+                      </Typography>
+                    }
+                  />
+                  <ListItemSecondaryAction>
+                    <Tooltip title="Aprobar">
+                      <IconButton
+                        onClick={() => handleRequestAction(request.id_solicitud, 'aprobada')}
+                        sx={{ color: 'success.main' }}
+                      >
+                        <SaveIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Rechazar">
+                      <IconButton
+                        onClick={() => handleRequestAction(request.id_solicitud, 'rechazada')}
+                        sx={{ color: 'error.main' }}
+                      >
+                        <CancelIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))
+            )}
+          </List>
+        </Paper>
+      );
+    }
+    return null;
+  };
+
+  // Renderizar sección de gestión de administradores (superadmin)
+  const renderAdminManagementSection = () => {
+    if (hasRole(userData?.rol, 'superadmin')) {
+      return (
+        <Paper
+          elevation={3}
+          sx={{
+            p: 3,
+            background: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: 2
+          }}
+        >
+          <Typography
+            variant="h6"
+            sx={{
+              color: 'white',
+              mb: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+            }}
+          >
+            <BadgeIcon /> Gestión de Administradores
+          </Typography>
+          
+          <List sx={{ bgcolor: 'rgba(255, 255, 255, 0.05)', borderRadius: 1 }}>
+            {adminList.length === 0 ? (
+              <ListItem>
+                <ListItemText
+                  primary="No hay administradores registrados"
+                  sx={{ color: 'white' }}
+                />
+              </ListItem>
+            ) : (
+              adminList.map((admin) => (
+                <ListItem key={admin.id_usuario}>
+                  <ListItemText
+                    primary={
+                      <Typography color="white">
+                        {admin.nombre} ({admin.correo})
+                      </Typography>
+                    }
+                    secondary={
+                      <Typography color="rgba(255, 255, 255, 0.7)" variant="body2">
+                        Registrado: {formatDate(admin.fecha_registro)}
+                      </Typography>
+                    }
+                  />
+                  <ListItemSecondaryAction>
+                    <Tooltip title="Remover administrador">
+                      <IconButton
+                        onClick={() => handleRemoveAdmin(admin.id_usuario)}
+                        sx={{ color: 'error.main' }}
+                      >
+                        <CancelIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))
+            )}
+          </List>
+        </Paper>
+      );
+    }
+    return null;
+  };
+
   return (
     <Box
       sx={{
@@ -306,429 +652,720 @@ const Profile = () => {
     >
       <BackgroundShapes />
 
-      <Container maxWidth="md" sx={{ position: 'relative', zIndex: 1 }}>
+      <Container maxWidth={hasRole(userData?.rol, 'superadmin') ? "lg" : "md"} sx={{ position: 'relative', zIndex: 1 }}>
+        {hasRole(userData?.rol, 'superadmin') ? (
+          // Layout para superadmin (dos columnas)
+          <Grid container spacing={4} alignItems="flex-start">
+            {/* Columna izquierda: Perfil del usuario */}
+            <Grid item xs={12} md={6}>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                {/* Botón de retroceso */}
+                <Box sx={{ mb: 3 }}>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Button
+                      onClick={() => navigate(-1)}
+                      startIcon={<ArrowBackIcon />}
+                      sx={{
+                        color: 'white',
+                        '&:hover': {
+                          background: 'rgba(255, 255, 255, 0.1)',
+                        }
+                      }}
+                    >
+                      Volver
+                    </Button>
+                  </motion.div>
+                </Box>
+
+                <Paper
+                  elevation={3}
+                  sx={{
+                    p: 4,
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: 4,
+                    boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
+                  }}
+                >
+                  <Grid container spacing={4}>
+                    <Grid item xs={12} display="flex" justifyContent="center">
+                      <motion.div 
+                        whileHover={{ scale: 1.05 }} 
+                        whileTap={{ scale: 0.95 }}
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.5 }}
+                      >
+                        <Box position="relative">
+                          <Avatar
+                            src={userData?.foto_perfil}
+                            sx={{
+                              width: 150,
+                              height: 150,
+                              border: '4px solid rgba(255, 255, 255, 0.2)',
+                              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+                              background: theme => theme.palette.primary.main,
+                            }}
+                          >
+                            {!userData?.foto_perfil && <PersonIcon sx={{ fontSize: 80 }} />}
+                          </Avatar>
+                          <Tooltip title="Cambiar foto de perfil">
+                            <IconButton
+                              onClick={handlePhotoClick}
+                              disabled={isUploading}
+                              sx={{
+                                position: 'absolute',
+                                bottom: 0,
+                                right: 0,
+                                backgroundColor: 'primary.main',
+                                '&:hover': {
+                                  backgroundColor: 'primary.dark',
+                                  transform: 'scale(1.1)',
+                                },
+                                transition: 'transform 0.2s',
+                                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                              }}
+                            >
+                              {isUploading ? (
+                                <CircularProgress size={24} color="inherit" />
+                              ) : (
+                                <PhotoCameraIcon />
+                              )}
+                            </IconButton>
+                          </Tooltip>
+                          <input
+                            type="file"
+                            hidden
+                            ref={fileInputRef}
+                            accept="image/*"
+                            onChange={handlePhotoChange}
+                          />
+                        </Box>
+                      </motion.div>
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <Typography
+                        variant="h4"
+                        component={motion.h4}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        sx={{
+                          textAlign: 'center',
+                          mb: 4,
+                          color: 'white',
+                          textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                          fontWeight: 600,
+                          letterSpacing: 1,
+                        }}
+                      >
+                        {userData?.nombre}
+                      </Typography>
+                    </Grid>
+
+                    <Grid item xs={12} md={6}>
+                      <motion.div whileHover={{ scale: 1.02 }}>
+                        <TextField
+                          fullWidth
+                          label="Nombre"
+                          name="nombre"
+                          value={isEditing ? editData.nombre : userData?.nombre}
+                          onChange={handleInputChange}
+                          disabled={!isEditing}
+                          placeholder="Tu nombre"
+                          InputProps={{
+                            startAdornment: <BadgeIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                          }}
+                          sx={{
+                            mb: 3,
+                            '& .MuiOutlinedInput-root': {
+                              '& fieldset': {
+                                borderColor: 'rgba(255, 255, 255, 0.3)',
+                                borderWidth: 2,
+                              },
+                              '&:hover fieldset': {
+                                borderColor: 'rgba(255, 255, 255, 0.5)',
+                              },
+                              '&.Mui-focused fieldset': {
+                                borderColor: '#90CAF9',
+                              },
+                            },
+                            '& .MuiInputLabel-root': {
+                              color: 'rgba(255, 255, 255, 0.9) !important',
+                              fontSize: '1.1rem',
+                            },
+                            '& .MuiInputLabel-root.Mui-focused': {
+                              color: 'rgba(255, 255, 255, 0.9) !important',
+                            },
+                            '& .MuiInputBase-input': {
+                              color: 'white',
+                              fontSize: '1.1rem',
+                              '&::placeholder': {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                opacity: 1,
+                              },
+                            },
+                          }}
+                        />
+                      </motion.div>
+                    </Grid>
+
+                    <Grid item xs={12} md={6}>
+                      <motion.div whileHover={{ scale: 1.02 }}>
+                        <TextField
+                          fullWidth
+                          label="Correo Electrónico"
+                          name="correo"
+                          value={isEditing ? editData.correo : userData?.correo}
+                          onChange={handleInputChange}
+                          disabled={!isEditing}
+                          placeholder="tu.correo@ejemplo.com"
+                          InputProps={{
+                            startAdornment: <EmailIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                          }}
+                          sx={{
+                            mb: 3,
+                            '& .MuiOutlinedInput-root': {
+                              '& fieldset': {
+                                borderColor: 'rgba(255, 255, 255, 0.3)',
+                                borderWidth: 2,
+                              },
+                              '&:hover fieldset': {
+                                borderColor: 'rgba(255, 255, 255, 0.5)',
+                              },
+                              '&.Mui-focused fieldset': {
+                                borderColor: '#90CAF9',
+                              },
+                            },
+                            '& .MuiInputLabel-root': {
+                              color: 'rgba(255, 255, 255, 0.9) !important',
+                              fontSize: '1.1rem',
+                            },
+                            '& .MuiInputLabel-root.Mui-focused': {
+                              color: 'rgba(255, 255, 255, 0.9) !important',
+                            },
+                            '& .MuiInputBase-input': {
+                              color: 'white',
+                              fontSize: '1.1rem',
+                              '&::placeholder': {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                opacity: 1,
+                              },
+                            },
+                          }}
+                        />
+                      </motion.div>
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <Box sx={{ mb: 3 }}>
+                        <Button
+                          variant="text"
+                          onClick={() => setShowPasswordFields(!showPasswordFields)}
+                          startIcon={<LockIcon />}
+                          sx={{
+                            color: 'white',
+                            mb: 2,
+                            '&:hover': {
+                              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                            },
+                          }}
+                        >
+                          {showPasswordFields ? 'Ocultar cambio de contraseña' : 'Cambiar contraseña'}
+                        </Button>
+
+                        <Collapse in={showPasswordFields}>
+                          <Grid container spacing={2}>
+                            <Grid item xs={12}>
+                              <TextField
+                                fullWidth
+                                type="password"
+                                label="Contraseña actual"
+                                value={passwordData.currentPassword}
+                                onChange={handlePasswordChange('currentPassword')}
+                                InputProps={{
+                                  startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                                }}
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    '& fieldset': {
+                                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                                      borderWidth: 2,
+                                    },
+                                    '&:hover fieldset': {
+                                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                                    },
+                                    '&.Mui-focused fieldset': {
+                                      borderColor: '#90CAF9',
+                                    },
+                                  },
+                                  '& .MuiInputLabel-root': {
+                                    color: 'white',
+                                    fontSize: '1.1rem',
+                                  },
+                                  '& .MuiInputBase-input': {
+                                    color: 'white',
+                                    fontSize: '1.1rem',
+                                  },
+                                }}
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <TextField
+                                fullWidth
+                                type="password"
+                                label="Nueva contraseña"
+                                value={passwordData.newPassword}
+                                onChange={handlePasswordChange('newPassword')}
+                                InputProps={{
+                                  startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                                }}
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    '& fieldset': {
+                                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                                      borderWidth: 2,
+                                    },
+                                    '&:hover fieldset': {
+                                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                                    },
+                                    '&.Mui-focused fieldset': {
+                                      borderColor: '#90CAF9',
+                                    },
+                                  },
+                                  '& .MuiInputLabel-root': {
+                                    color: 'white',
+                                    fontSize: '1.1rem',
+                                  },
+                                  '& .MuiInputBase-input': {
+                                    color: 'white',
+                                    fontSize: '1.1rem',
+                                  },
+                                }}
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <TextField
+                                fullWidth
+                                type="password"
+                                label="Confirmar nueva contraseña"
+                                value={passwordData.confirmPassword}
+                                onChange={handlePasswordChange('confirmPassword')}
+                                error={passwordData.newPassword !== passwordData.confirmPassword && passwordData.confirmPassword !== ''}
+                                helperText={
+                                  passwordData.newPassword !== passwordData.confirmPassword && passwordData.confirmPassword !== ''
+                                    ? 'Las contraseñas no coinciden'
+                                    : ''
+                                }
+                                InputProps={{
+                                  startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                                }}
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    '& fieldset': {
+                                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                                      borderWidth: 2,
+                                    },
+                                    '&:hover fieldset': {
+                                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                                    },
+                                    '&.Mui-focused fieldset': {
+                                      borderColor: '#90CAF9',
+                                    },
+                                  },
+                                  '& .MuiInputLabel-root': {
+                                    color: 'white',
+                                    fontSize: '1.1rem',
+                                  },
+                                  '& .MuiInputBase-input': {
+                                    color: 'white',
+                                    fontSize: '1.1rem',
+                                  },
+                                  '& .MuiFormHelperText-root': {
+                                    color: '#ff1744',
+                                  },
+                                }}
+                              />
+                            </Grid>
+                            <Grid item xs={12} display="flex" justifyContent="flex-end">
+                              <Button
+                                variant="contained"
+                                onClick={handleSavePassword}
+                                disabled={
+                                  !passwordData.currentPassword ||
+                                  !passwordData.newPassword ||
+                                  !passwordData.confirmPassword ||
+                                  passwordData.newPassword !== passwordData.confirmPassword
+                                }
+                                sx={{
+                                  background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
+                                  boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+                                }}
+                              >
+                                Guardar contraseña
+                              </Button>
+                            </Grid>
+                          </Grid>
+                        </Collapse>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12} md={6}>
+                      <motion.div whileHover={{ scale: 1.02 }}>
+                        <Box sx={{ position: 'relative' }}>
+                          <TextField
+                            fullWidth
+                            label="Rol de Usuario"
+                            value={userData?.rol}
+                            disabled
+                            InputProps={{
+                              startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                            }}
+                            sx={{
+                              mb: 3,
+                              '& .MuiOutlinedInput-root': {
+                                '& fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                                  borderWidth: 2,
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.5)',
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                              },
+                              '& .MuiInputBase-input': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                                textTransform: 'capitalize',
+                              },
+                            }}
+                          />
+                          {hasRole(userData?.rol, 'usuario') && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => setOpenAdminRequest(true)}
+                              startIcon={<SendIcon />}
+                              sx={{
+                                position: 'absolute',
+                                right: 0,
+                                top: '100%',
+                                color: 'white',
+                                borderColor: 'rgba(255, 255, 255, 0.3)',
+                                '&:hover': {
+                                  borderColor: 'white',
+                                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                },
+                              }}
+                            >
+                              Solicitar rol admin
+                            </Button>
+                          )}
+                        </Box>
+                      </motion.div>
+                    </Grid>
+
+                    {userData?.fecha_registro && (
+                      <Grid item xs={12}>
+                        <motion.div whileHover={{ scale: 1.02 }}>
+                          <TextField
+                            fullWidth
+                            label="Fecha de Registro"
+                            value={formatDate(userData.fecha_registro)}
+                            disabled
+                            InputProps={{
+                              startAdornment: <CalendarTodayIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                            }}
+                            sx={{
+                              mb: 3,
+                              '& .MuiOutlinedInput-root': {
+                                '& fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                                  borderWidth: 2,
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.5)',
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                color: 'rgba(255, 255, 255, 0.9)',
+                                fontSize: '1.1rem',
+                              },
+                              '& .MuiInputBase-input': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                              },
+                            }}
+                          />
+                        </motion.div>
+                      </Grid>
+                    )}
+
+                    {/* Sección de Amigos */}
+                    <Grid item xs={12}>
+                      <Typography
+                        variant="h5"
+                        sx={{
+                          color: 'white',
+                          mb: 3,
+                          textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Amigos
+                      </Typography>
+                      <FriendsManager />
+                    </Grid>
+
+                    <Grid item xs={12} display="flex" justifyContent="center" gap={2}>
+                      <AnimatePresence mode="wait">
+                        {!isEditing ? (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                          >
+                            <Button
+                              variant="contained"
+                              startIcon={<EditIcon />}
+                              onClick={() => setIsEditing(true)}
+                              sx={{
+                                background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
+                                boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+                                transition: 'transform 0.2s',
+                                '&:hover': {
+                                  transform: 'scale(1.05)',
+                                },
+                              }}
+                            >
+                              Editar Perfil
+                            </Button>
+                          </motion.div>
+                        ) : (
+                          <>
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.8 }}
+                            >
+                              <Button
+                                variant="contained"
+                                color="primary"
+                                startIcon={<SaveIcon />}
+                                onClick={handleSave}
+                                sx={{
+                                  background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
+                                  boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+                                  transition: 'transform 0.2s',
+                                  '&:hover': {
+                                    transform: 'scale(1.05)',
+                                  },
+                                }}
+                              >
+                                Guardar
+                              </Button>
+                            </motion.div>
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.8 }}
+                            >
+                              <Button
+                                variant="outlined"
+                                startIcon={<CancelIcon />}
+                                onClick={() => {
+                                  setIsEditing(false);
+                                  setEditData(userData || {});
+                                }}
+                                sx={{
+                                  borderColor: '#ff5252',
+                                  color: '#ff5252',
+                                  '&:hover': {
+                                    borderColor: '#ff1744',
+                                    backgroundColor: 'rgba(255, 23, 68, 0.04)',
+                                    transform: 'scale(1.05)',
+                                  },
+                                  transition: 'transform 0.2s',
+                                }}
+                              >
+                                Cancelar
+                              </Button>
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              </motion.div>
+            </Grid>
+
+            {/* Columna derecha: Gestión administrativa */}
+            <Grid item xs={12} md={6}>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+              >
+                {/* Botón invisible para alineación */}
+                <Box sx={{ mb: 3, visibility: 'hidden' }}>
+                  <Button
+                    startIcon={<ArrowBackIcon />}
+                    sx={{
+                      color: 'white',
+                      '&:hover': {
+                        background: 'rgba(255, 255, 255, 0.1)',
+                      }
+                    }}
+                  >
+                    Volver
+                  </Button>
+                </Box>
+                {renderUsersSection()}
+                {renderAdminRequestsSection()}
+                {renderAdminManagementSection()}
+              </motion.div>
+            </Grid>
+          </Grid>
+        ) : (
+          // Layout para usuarios normales y admin (una columna)
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-          {/* Botón de retroceso */}
-          <Box sx={{ mb: 3 }}>
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Button
-                onClick={() => navigate(-1)}
-                startIcon={<ArrowBackIcon />}
-                sx={{
-                  color: 'white',
-                  '&:hover': {
-                    background: 'rgba(255, 255, 255, 0.1)',
-                  }
-                }}
+            {/* Botón de retroceso */}
+            <Box sx={{ mb: 3 }}>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
-                Volver
-              </Button>
-            </motion.div>
-          </Box>
-
-          <Paper
-            elevation={3}
-              sx={{
-              p: 4,
-              background: 'rgba(255, 255, 255, 0.05)',
-              backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: 4,
-              boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <Grid container spacing={4}>
-              <Grid item xs={12} display="flex" justifyContent="center">
-                <motion.div 
-                  whileHover={{ scale: 1.05 }} 
-                  whileTap={{ scale: 0.95 }}
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <Box position="relative">
-                <Avatar
-                      src={userData?.foto_perfil}
-                  sx={{
-                    width: 150,
-                    height: 150,
-                        border: '4px solid rgba(255, 255, 255, 0.2)',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
-                        background: theme => theme.palette.primary.main,
-                  }}
-                >
-                      {!userData?.foto_perfil && <PersonIcon sx={{ fontSize: 80 }} />}
-                </Avatar>
-                <Tooltip title="Cambiar foto de perfil">
-                  <IconButton
-                        onClick={handlePhotoClick}
-                        disabled={isUploading}
-                    sx={{
-                      position: 'absolute',
-                      bottom: 0,
-                      right: 0,
-                      backgroundColor: 'primary.main',
-                      '&:hover': {
-                        backgroundColor: 'primary.dark',
-                            transform: 'scale(1.1)',
-                      },
-                          transition: 'transform 0.2s',
-                          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
-                    }}
-                  >
-                        {isUploading ? (
-                      <CircularProgress size={24} color="inherit" />
-                    ) : (
-                      <PhotoCameraIcon />
-                    )}
-                  </IconButton>
-                </Tooltip>
-                <input
-                  type="file"
-                      hidden
-                  ref={fileInputRef}
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                />
-              </Box>
-                </motion.div>
-              </Grid>
-
-              <Grid item xs={12}>
-                <Typography
-                  variant="h4"
-                  component={motion.h4}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  sx={{
-                    textAlign: 'center',
-                    mb: 4,
-                    color: 'white',
-                    textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
-                    fontWeight: 600,
-                    letterSpacing: 1,
-                  }}
-                >
-                  {userData?.nombre}
-                </Typography>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <motion.div whileHover={{ scale: 1.02 }}>
-                  <TextField
-                    fullWidth
-                    label="Nombre"
-                    name="nombre"
-                    value={isEditing ? editData.nombre : userData?.nombre}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    placeholder="Tu nombre"
-                    InputProps={{
-                      startAdornment: <BadgeIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
-                    }}
-                    sx={{
-                      mb: 3,
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': {
-                          borderColor: 'rgba(255, 255, 255, 0.3)',
-                          borderWidth: 2,
-                        },
-                        '&:hover fieldset': {
-                          borderColor: 'rgba(255, 255, 255, 0.5)',
-                        },
-                        '&.Mui-focused fieldset': {
-                          borderColor: '#90CAF9',
-                        },
-                      },
-                      '& .MuiInputLabel-root': {
-                        color: 'white',
-                        fontSize: '1.1rem',
-                      },
-                      '& .MuiInputBase-input': {
-                        color: 'white',
-                        fontSize: '1.1rem',
-                        '&::placeholder': {
-                          color: 'rgba(255, 255, 255, 0.7)',
-                          opacity: 1,
-                        },
-                      },
-                    }}
-                  />
-                </motion.div>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <motion.div whileHover={{ scale: 1.02 }}>
-                  <TextField
-                    fullWidth
-                    label="Correo Electrónico"
-                    name="correo"
-                    value={isEditing ? editData.correo : userData?.correo}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    placeholder="tu.correo@ejemplo.com"
-                    InputProps={{
-                      startAdornment: <EmailIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
-                    }}
-                    sx={{
-                      mb: 3,
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': {
-                          borderColor: 'rgba(255, 255, 255, 0.3)',
-                          borderWidth: 2,
-                        },
-                        '&:hover fieldset': {
-                          borderColor: 'rgba(255, 255, 255, 0.5)',
-                        },
-                        '&.Mui-focused fieldset': {
-                          borderColor: '#90CAF9',
-                        },
-                      },
-                      '& .MuiInputLabel-root': {
-                        color: 'white',
-                        fontSize: '1.1rem',
-                      },
-                      '& .MuiInputBase-input': {
-                        color: 'white',
-                        fontSize: '1.1rem',
-                        '&::placeholder': {
-                          color: 'rgba(255, 255, 255, 0.7)',
-                          opacity: 1,
-                        },
-                      },
-                    }}
-                  />
-                </motion.div>
-              </Grid>
-
-              <Grid item xs={12}>
-                <Box sx={{ mb: 3 }}>
-                  <Button
-                    variant="text"
-                    onClick={() => setShowPasswordFields(!showPasswordFields)}
-                    startIcon={<LockIcon />}
-                    sx={{
-                      color: 'white',
-                      mb: 2,
-                      '&:hover': {
-                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                      },
-                    }}
-                  >
-                    {showPasswordFields ? 'Ocultar cambio de contraseña' : 'Cambiar contraseña'}
-                  </Button>
-
-                  <Collapse in={showPasswordFields}>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12}>
-                        <TextField
-                          fullWidth
-                          type="password"
-                          label="Contraseña actual"
-                          value={passwordData.currentPassword}
-                          onChange={handlePasswordChange('currentPassword')}
-                          InputProps={{
-                            startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
-                          }}
-                          sx={{
-                            '& .MuiOutlinedInput-root': {
-                              '& fieldset': {
-                                borderColor: 'rgba(255, 255, 255, 0.3)',
-                                borderWidth: 2,
-                              },
-                              '&:hover fieldset': {
-                                borderColor: 'rgba(255, 255, 255, 0.5)',
-                              },
-                              '&.Mui-focused fieldset': {
-                                borderColor: '#90CAF9',
-                              },
-                            },
-                            '& .MuiInputLabel-root': {
-                              color: 'white',
-                              fontSize: '1.1rem',
-                            },
-                            '& .MuiInputBase-input': {
-                              color: 'white',
-                              fontSize: '1.1rem',
-                            },
-                          }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <TextField
-                          fullWidth
-                          type="password"
-                          label="Nueva contraseña"
-                          value={passwordData.newPassword}
-                          onChange={handlePasswordChange('newPassword')}
-                          InputProps={{
-                            startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
-                          }}
-                          sx={{
-                            '& .MuiOutlinedInput-root': {
-                              '& fieldset': {
-                                borderColor: 'rgba(255, 255, 255, 0.3)',
-                                borderWidth: 2,
-                              },
-                              '&:hover fieldset': {
-                                borderColor: 'rgba(255, 255, 255, 0.5)',
-                              },
-                              '&.Mui-focused fieldset': {
-                                borderColor: '#90CAF9',
-                              },
-                            },
-                            '& .MuiInputLabel-root': {
-                              color: 'white',
-                              fontSize: '1.1rem',
-                            },
-                            '& .MuiInputBase-input': {
-                              color: 'white',
-                              fontSize: '1.1rem',
-                            },
-                          }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                          type="password"
-                          label="Confirmar nueva contraseña"
-                          value={passwordData.confirmPassword}
-                          onChange={handlePasswordChange('confirmPassword')}
-                          error={passwordData.newPassword !== passwordData.confirmPassword && passwordData.confirmPassword !== ''}
-                          helperText={
-                            passwordData.newPassword !== passwordData.confirmPassword && passwordData.confirmPassword !== ''
-                              ? 'Las contraseñas no coinciden'
-                              : ''
-                          }
-                          InputProps={{
-                            startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
-                          }}
-                          sx={{
-                            '& .MuiOutlinedInput-root': {
-                              '& fieldset': {
-                                borderColor: 'rgba(255, 255, 255, 0.3)',
-                                borderWidth: 2,
-                              },
-                              '&:hover fieldset': {
-                                borderColor: 'rgba(255, 255, 255, 0.5)',
-                              },
-                              '&.Mui-focused fieldset': {
-                                borderColor: '#90CAF9',
-                              },
-                            },
-                            '& .MuiInputLabel-root': {
-                              color: 'white',
-                              fontSize: '1.1rem',
-                            },
-                            '& .MuiInputBase-input': {
-                              color: 'white',
-                              fontSize: '1.1rem',
-                            },
-                            '& .MuiFormHelperText-root': {
-                              color: '#ff1744',
-                            },
-                          }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} display="flex" justifyContent="flex-end">
-                        <Button
-                          variant="contained"
-                          onClick={handleSavePassword}
-                          disabled={
-                            !passwordData.currentPassword ||
-                            !passwordData.newPassword ||
-                            !passwordData.confirmPassword ||
-                            passwordData.newPassword !== passwordData.confirmPassword
-                          }
-                          sx={{
-                            background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
-                            boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
-                          }}
-                        >
-                          Guardar contraseña
-                        </Button>
-                      </Grid>
-                    </Grid>
-                  </Collapse>
-                </Box>
-            </Grid>
-
-              <Grid item xs={12} md={6}>
-                <motion.div whileHover={{ scale: 1.02 }}>
-                  <Box sx={{ position: 'relative' }}>
-                    <TextField
-                      fullWidth
-                      label="Rol de Usuario"
-                      value={userData?.rol}
-                      disabled
-                      InputProps={{
-                        startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
-                      }}
-                      sx={{
-                        mb: 3,
-                        '& .MuiOutlinedInput-root': {
-                          '& fieldset': {
-                            borderColor: 'rgba(255, 255, 255, 0.3)',
-                            borderWidth: 2,
-                          },
-                          '&:hover fieldset': {
-                            borderColor: 'rgba(255, 255, 255, 0.5)',
-                          },
-                        },
-                        '& .MuiInputLabel-root': {
-                          color: 'white',
-                          fontSize: '1.1rem',
-                        },
-                        '& .MuiInputBase-input': {
-                          color: 'white',
-                          fontSize: '1.1rem',
-                          textTransform: 'capitalize',
-                        },
-                      }}
-                    />
-                    {userData?.rol === 'usuario' && (
                 <Button
-                  variant="outlined"
-                        size="small"
-                        onClick={() => setOpenAdminRequest(true)}
-                        startIcon={<SendIcon />}
+                  onClick={() => navigate(-1)}
+                  startIcon={<ArrowBackIcon />}
+                  sx={{
+                    color: 'white',
+                    '&:hover': {
+                      background: 'rgba(255, 255, 255, 0.1)',
+                    }
+                  }}
+                >
+                  Volver
+                </Button>
+              </motion.div>
+            </Box>
+
+            <Paper
+              elevation={3}
+              sx={{
+                p: 4,
+                background: 'rgba(255, 255, 255, 0.05)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: 4,
+                boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
+                mb: 3
+              }}
+            >
+              <Grid container spacing={4}>
+                <Grid item xs={12} display="flex" justifyContent="center">
+                  <motion.div 
+                    whileHover={{ scale: 1.05 }} 
+                    whileTap={{ scale: 0.95 }}
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <Box position="relative">
+                      <Avatar
+                        src={userData?.foto_perfil}
                         sx={{
-                          position: 'absolute',
-                          right: 0,
-                          top: '100%',
-                          color: 'white',
-                          borderColor: 'rgba(255, 255, 255, 0.3)',
-                          '&:hover': {
-                            borderColor: 'white',
-                            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                          },
+                          width: 150,
+                          height: 150,
+                          border: '4px solid rgba(255, 255, 255, 0.2)',
+                          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+                          background: theme => theme.palette.primary.main,
                         }}
                       >
-                        Solicitar rol admin
-                      </Button>
-                    )}
-                  </Box>
-                </motion.div>
-              </Grid>
+                        {!userData?.foto_perfil && <PersonIcon sx={{ fontSize: 80 }} />}
+                      </Avatar>
+                      <Tooltip title="Cambiar foto de perfil">
+                        <IconButton
+                          onClick={handlePhotoClick}
+                          disabled={isUploading}
+                          sx={{
+                            position: 'absolute',
+                            bottom: 0,
+                            right: 0,
+                            backgroundColor: 'primary.main',
+                            '&:hover': {
+                              backgroundColor: 'primary.dark',
+                              transform: 'scale(1.1)',
+                            },
+                            transition: 'transform 0.2s',
+                            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                          }}
+                        >
+                          {isUploading ? (
+                            <CircularProgress size={24} color="inherit" />
+                          ) : (
+                            <PhotoCameraIcon />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                      <input
+                        type="file"
+                        hidden
+                        ref={fileInputRef}
+                        accept="image/*"
+                        onChange={handlePhotoChange}
+                      />
+                    </Box>
+                  </motion.div>
+                </Grid>
 
-              {userData?.fecha_registro && (
                 <Grid item xs={12}>
+                  <Typography
+                    variant="h4"
+                    component={motion.h4}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    sx={{
+                      textAlign: 'center',
+                      mb: 4,
+                      color: 'white',
+                      textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                      fontWeight: 600,
+                      letterSpacing: 1,
+                    }}
+                  >
+                    {userData?.nombre}
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
                   <motion.div whileHover={{ scale: 1.02 }}>
                     <TextField
                       fullWidth
-                      label="Fecha de Registro"
-                      value={formatDate(userData.fecha_registro)}
-                      disabled
+                      label="Nombre"
+                      name="nombre"
+                      value={isEditing ? editData.nombre : userData?.nombre}
+                      onChange={handleInputChange}
+                      disabled={!isEditing}
+                      placeholder="Tu nombre"
                       InputProps={{
-                        startAdornment: <CalendarTodayIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                        startAdornment: <BadgeIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
                       }}
                       sx={{
                         mb: 3,
@@ -740,73 +1377,352 @@ const Profile = () => {
                           '&:hover fieldset': {
                             borderColor: 'rgba(255, 255, 255, 0.5)',
                           },
+                          '&.Mui-focused fieldset': {
+                            borderColor: '#90CAF9',
+                          },
                         },
                         '& .MuiInputLabel-root': {
-                          color: 'rgba(255, 255, 255, 0.9)',
+                          color: 'rgba(255, 255, 255, 0.9) !important',
                           fontSize: '1.1rem',
+                        },
+                        '& .MuiInputLabel-root.Mui-focused': {
+                          color: 'rgba(255, 255, 255, 0.9) !important',
                         },
                         '& .MuiInputBase-input': {
                           color: 'white',
                           fontSize: '1.1rem',
+                          '&::placeholder': {
+                            color: 'rgba(255, 255, 255, 0.7)',
+                            opacity: 1,
+                          },
                         },
                       }}
                     />
                   </motion.div>
                 </Grid>
-              )}
 
-              {/* Sección de Amigos */}
-              <Grid item xs={12}>
-                <Typography
-                  variant="h5"
-                  sx={{
-                    color: 'white',
-                    mb: 3,
-                    textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
-                    fontWeight: 600,
-                  }}
-                >
-                  Amigos
-                </Typography>
-                <FriendsManager />
-              </Grid>
+                <Grid item xs={12} md={6}>
+                  <motion.div whileHover={{ scale: 1.02 }}>
+                    <TextField
+                      fullWidth
+                      label="Correo Electrónico"
+                      name="correo"
+                      value={isEditing ? editData.correo : userData?.correo}
+                      onChange={handleInputChange}
+                      disabled={!isEditing}
+                      placeholder="tu.correo@ejemplo.com"
+                      InputProps={{
+                        startAdornment: <EmailIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                      }}
+                      sx={{
+                        mb: 3,
+                        '& .MuiOutlinedInput-root': {
+                          '& fieldset': {
+                            borderColor: 'rgba(255, 255, 255, 0.3)',
+                            borderWidth: 2,
+                          },
+                          '&:hover fieldset': {
+                            borderColor: 'rgba(255, 255, 255, 0.5)',
+                          },
+                          '&.Mui-focused fieldset': {
+                            borderColor: '#90CAF9',
+                          },
+                        },
+                        '& .MuiInputLabel-root': {
+                          color: 'rgba(255, 255, 255, 0.9) !important',
+                          fontSize: '1.1rem',
+                        },
+                        '& .MuiInputLabel-root.Mui-focused': {
+                          color: 'rgba(255, 255, 255, 0.9) !important',
+                        },
+                        '& .MuiInputBase-input': {
+                          color: 'white',
+                          fontSize: '1.1rem',
+                          '&::placeholder': {
+                            color: 'rgba(255, 255, 255, 0.7)',
+                            opacity: 1,
+                          },
+                        },
+                      }}
+                    />
+                  </motion.div>
+                </Grid>
 
-              <Grid item xs={12} display="flex" justifyContent="center" gap={2}>
-                <AnimatePresence mode="wait">
-                  {!isEditing ? (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
+                <Grid item xs={12}>
+                  <Box sx={{ mb: 3 }}>
+                    <Button
+                      variant="text"
+                      onClick={() => setShowPasswordFields(!showPasswordFields)}
+                      startIcon={<LockIcon />}
+                      sx={{
+                        color: 'white',
+                        mb: 2,
+                        '&:hover': {
+                          backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        },
+                      }}
                     >
-                      <Button
-                        variant="contained"
-                        startIcon={<EditIcon />}
-                        onClick={() => setIsEditing(true)}
+                      {showPasswordFields ? 'Ocultar cambio de contraseña' : 'Cambiar contraseña'}
+                    </Button>
+
+                    <Collapse in={showPasswordFields}>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                          <TextField
+                            fullWidth
+                            type="password"
+                            label="Contraseña actual"
+                            value={passwordData.currentPassword}
+                            onChange={handlePasswordChange('currentPassword')}
+                            InputProps={{
+                              startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                            }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                '& fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                                  borderWidth: 2,
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.5)',
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#90CAF9',
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                              },
+                              '& .MuiInputBase-input': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                              },
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            type="password"
+                            label="Nueva contraseña"
+                            value={passwordData.newPassword}
+                            onChange={handlePasswordChange('newPassword')}
+                            InputProps={{
+                              startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                            }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                '& fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                                  borderWidth: 2,
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.5)',
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#90CAF9',
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                              },
+                              '& .MuiInputBase-input': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                              },
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            fullWidth
+                            type="password"
+                            label="Confirmar nueva contraseña"
+                            value={passwordData.confirmPassword}
+                            onChange={handlePasswordChange('confirmPassword')}
+                            error={passwordData.newPassword !== passwordData.confirmPassword && passwordData.confirmPassword !== ''}
+                            helperText={
+                              passwordData.newPassword !== passwordData.confirmPassword && passwordData.confirmPassword !== ''
+                                ? 'Las contraseñas no coinciden'
+                                : ''
+                            }
+                            InputProps={{
+                              startAdornment: <LockIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                            }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                '& fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                                  borderWidth: 2,
+                                },
+                                '&:hover fieldset': {
+                                  borderColor: 'rgba(255, 255, 255, 0.5)',
+                                },
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#90CAF9',
+                                },
+                              },
+                              '& .MuiInputLabel-root': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                              },
+                              '& .MuiInputBase-input': {
+                                color: 'white',
+                                fontSize: '1.1rem',
+                              },
+                              '& .MuiFormHelperText-root': {
+                                color: '#ff1744',
+                              },
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} display="flex" justifyContent="flex-end">
+                          <Button
+                            variant="contained"
+                            onClick={handleSavePassword}
+                            disabled={
+                              !passwordData.currentPassword ||
+                              !passwordData.newPassword ||
+                              !passwordData.confirmPassword ||
+                              passwordData.newPassword !== passwordData.confirmPassword
+                            }
+                            sx={{
+                              background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
+                              boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+                            }}
+                          >
+                            Guardar contraseña
+                          </Button>
+                        </Grid>
+                      </Grid>
+                    </Collapse>
+                  </Box>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <motion.div whileHover={{ scale: 1.02 }}>
+                    <Box sx={{ position: 'relative' }}>
+                      <TextField
+                        fullWidth
+                        label="Rol de Usuario"
+                        value={userData?.rol}
+                        disabled
+                        InputProps={{
+                          startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                        }}
                         sx={{
-                          background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
-                          boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
-                          transition: 'transform 0.2s',
-                          '&:hover': {
-                            transform: 'scale(1.05)',
+                          mb: 3,
+                          '& .MuiOutlinedInput-root': {
+                            '& fieldset': {
+                              borderColor: 'rgba(255, 255, 255, 0.3)',
+                              borderWidth: 2,
+                            },
+                            '&:hover fieldset': {
+                              borderColor: 'rgba(255, 255, 255, 0.5)',
+                            },
+                          },
+                          '& .MuiInputLabel-root': {
+                            color: 'white',
+                            fontSize: '1.1rem',
+                          },
+                          '& .MuiInputBase-input': {
+                            color: 'white',
+                            fontSize: '1.1rem',
+                            textTransform: 'capitalize',
                           },
                         }}
-                      >
-                        Editar Perfil
-                </Button>
+                      />
+                      {hasRole(userData?.rol, 'usuario') && (
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => setOpenAdminRequest(true)}
+                          startIcon={<SendIcon />}
+                          sx={{
+                            position: 'absolute',
+                            right: 0,
+                            top: '100%',
+                            color: 'white',
+                            borderColor: 'rgba(255, 255, 255, 0.3)',
+                            '&:hover': {
+                              borderColor: 'white',
+                              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                            },
+                          }}
+                        >
+                          Solicitar rol admin
+                        </Button>
+                      )}
+                    </Box>
+                  </motion.div>
+                </Grid>
+
+                {userData?.fecha_registro && (
+                  <Grid item xs={12}>
+                    <motion.div whileHover={{ scale: 1.02 }}>
+                      <TextField
+                        fullWidth
+                        label="Fecha de Registro"
+                        value={formatDate(userData.fecha_registro)}
+                        disabled
+                        InputProps={{
+                          startAdornment: <CalendarTodayIcon sx={{ mr: 1, color: 'rgba(255, 255, 255, 0.7)' }} />,
+                        }}
+                        sx={{
+                          mb: 3,
+                          '& .MuiOutlinedInput-root': {
+                            '& fieldset': {
+                              borderColor: 'rgba(255, 255, 255, 0.3)',
+                              borderWidth: 2,
+                            },
+                            '&:hover fieldset': {
+                              borderColor: 'rgba(255, 255, 255, 0.5)',
+                            },
+                          },
+                          '& .MuiInputLabel-root': {
+                            color: 'rgba(255, 255, 255, 0.9)',
+                            fontSize: '1.1rem',
+                          },
+                          '& .MuiInputBase-input': {
+                            color: 'white',
+                            fontSize: '1.1rem',
+                          },
+                        }}
+                      />
                     </motion.div>
-                  ) : (
-                    <>
+                  </Grid>
+                )}
+
+                {/* Sección de Amigos */}
+                <Grid item xs={12}>
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      color: 'white',
+                      mb: 3,
+                      textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Amigos
+                  </Typography>
+                  <FriendsManager />
+                </Grid>
+
+                <Grid item xs={12} display="flex" justifyContent="center" gap={2}>
+                  <AnimatePresence mode="wait">
+                    {!isEditing ? (
                       <motion.div
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.8 }}
                       >
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<SaveIcon />}
-                  onClick={handleSave}
+                        <Button
+                          variant="contained"
+                          startIcon={<EditIcon />}
+                          onClick={() => setIsEditing(true)}
                           sx={{
                             background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
                             boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
@@ -815,43 +1731,76 @@ const Profile = () => {
                               transform: 'scale(1.05)',
                             },
                           }}
-                >
-                  Guardar
-                </Button>
-                      </motion.div>
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                      >
-                        <Button
-                          variant="outlined"
-                          startIcon={<CancelIcon />}
-                          onClick={() => {
-                            setIsEditing(false);
-                            setEditData(userData || {});
-                          }}
-                          sx={{
-                            borderColor: '#ff5252',
-                            color: '#ff5252',
-                            '&:hover': {
-                              borderColor: '#ff1744',
-                              backgroundColor: 'rgba(255, 23, 68, 0.04)',
-                              transform: 'scale(1.05)',
-                            },
-                            transition: 'transform 0.2s',
-                          }}
                         >
-                          Cancelar
+                          Editar Perfil
                         </Button>
                       </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
+                    ) : (
+                      <>
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                        >
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<SaveIcon />}
+                            onClick={handleSave}
+                            sx={{
+                              background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
+                              boxShadow: '0 3px 5px 2px rgba(33, 203, 243, .3)',
+                              transition: 'transform 0.2s',
+                              '&:hover': {
+                                transform: 'scale(1.05)',
+                              },
+                            }}
+                          >
+                            Guardar
+                          </Button>
+                        </motion.div>
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                        >
+                          <Button
+                            variant="outlined"
+                            startIcon={<CancelIcon />}
+                            onClick={() => {
+                              setIsEditing(false);
+                              setEditData(userData || {});
+                            }}
+                            sx={{
+                              borderColor: '#ff5252',
+                              color: '#ff5252',
+                              '&:hover': {
+                                borderColor: '#ff1744',
+                                backgroundColor: 'rgba(255, 23, 68, 0.04)',
+                                transform: 'scale(1.05)',
+                              },
+                              transition: 'transform 0.2s',
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </Grid>
               </Grid>
-            </Grid>
-          </Paper>
+            </Paper>
+
+            {/* Secciones administrativas para admin */}
+            {hasRole(userData?.rol, 'admin') && (
+              <>
+                {renderUsersSection()}
+                {renderAdminRequestsSection()}
+              </>
+            )}
           </motion.div>
+        )}
       </Container>
 
       <AnimatePresence>

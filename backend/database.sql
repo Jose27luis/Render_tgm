@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS Usuario (
   nombre VARCHAR(100) NOT NULL,
   correo VARCHAR(100) NOT NULL UNIQUE,
   contraseña VARCHAR(255) NOT NULL,
-  rol ENUM('admin', 'usuario') DEFAULT 'usuario',
+  rol ENUM('usuario', 'admin', 'superadmin') DEFAULT 'usuario',
   foto_perfil VARCHAR(255),
   fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

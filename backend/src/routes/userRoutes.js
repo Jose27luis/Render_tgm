@@ -5,11 +5,19 @@ const path = require('path');
 const UserController = require('../controllers/userController');
 const FriendController = require('../controllers/friendController');
 const { authenticateToken } = require('../middlewares/auth');
+const fs = require('fs');
 
 // Configuración de multer para subida de fotos de perfil
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/profile/'); // Directorio para fotos de perfil
+    // Asegurarse de que el directorio existe
+    const uploadDir = path.join(__dirname, '../../uploads/profile');
+    fs.mkdir(uploadDir, { recursive: true }, (err) => {
+      if (err) {
+        console.error('Error al crear directorio:', err);
+      }
+      cb(null, uploadDir);
+    });
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -38,6 +46,7 @@ const upload = multer({
 router.get('/profile', authenticateToken, (req, res) => UserController.getProfile(req, res));
 router.put('/profile', authenticateToken, (req, res) => UserController.updateProfile(req, res));
 router.get('/images', authenticateToken, (req, res) => UserController.getUserImages(req, res));
+router.get('/list', authenticateToken, (req, res) => UserController.getAllUsers(req, res));
 router.post('/profile/photo', authenticateToken, upload.single('photo'), (req, res) => UserController.updateProfilePhoto(req, res));
 
 // Rutas de amigos
