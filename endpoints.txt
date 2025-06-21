@@ -1,0 +1,41 @@
+# 📦 ADMIN ROUTES
+GET     /api/admin/users                    → Lista de todos los usuarios (solo superadmin)
+GET     /api/admin/users/:userId            → Detalles de un usuario (solo superadmin)
+POST    http://localhost:5000/api/user/requestAdmin/                 → Solicitud para ser admin (usuario autenticado)
+GET     http://localhost:5000/api/admin/pending               → Obtener solicitudes de amistad (solo admin)
+POST    /api/admin/requests/:id/accept      → Aceptar solicitud de amistad (solo admin)
+POST    /api/admin/requests/:id/reject      → Rechazar solicitud de amistad (solo admin)
+GET     /api/admin/pending                  → Solicitudes admin pendientes (solo admin/superadmin)
+PUT    http://localhost:5000/api/admin/handle → Aprobar o rechazar solicitud admin (solo superadmin)
+GET     /api/admin/list                     → Listado de administradores (solo superadmin)
+DELETE  /api/admin/remove/:id               → Eliminar administrador (solo superadmin)
+
+# 👤 USER ROUTES
+POST    /api/auth/register                  → Registro de usuario
+POST    /api/auth/login                     → Login de usuario (devuelve token)
+GET     /api/usuarios/notificaciones        → Obtener notificaciones del usuario (token requerido)
+
+# 👫 FRIENDS ROUTES
+GET    http://localhost:5000/api/user/amigos                     → Obtener lista de amigos
+POST   http://localhost:5000/api/user/solicitudes           → Enviar solicitud de amistad
+GET    http://localhost:5000/api/user/misSolicitudes            → Ver las solicitud de amistad
+DELETE    http://localhost:5000/api/user/eliminarSolicitudes/1           → Rechazar solicitud de amistad
+PUT     http://localhost:5000/api/user/aceptarSolicitudes/9             → Aceptar las solicudes
+GET http://localhost:5000/api/user/buscarPersonas?query="TECO" -> buscar personas
+
+# 📷 IMAGE ROUTES (asumidos del contexto)
+GET     /api/images                         → Obtener imágenes del usuario
+POST    /api/images/upload                  → Subir nueva imagen
+DELETE  /api/images/:id                     → Eliminar imagen
+POST    /api/images/:id/mejorar             → Mejorar iluminación (MBLLEN)
+
+# 🚀 REAL-ESRGAN ROUTES (mejora de resolución)
+POST    /api/images/:id/enhance             → Mejorar resolución con Real-ESRGAN
+        Body: { model: "real4x|anime4x|animevideo2x|animevideo3x|animevideo4x", 
+                tta_mode: boolean, tilesize: number }
+POST    /api/images/:id/enhance-combined    → Mejora combinada (iluminación + resolución)
+        Body: { model: "real4x", enhance_low_light: boolean }
+GET     /api/images/models                  → Obtener modelos Real-ESRGAN disponibles
+
+# ⚙️ OTROS (posiblemente futuros)
+GET     /api/status                         → Verificar estado del backend o autenticación

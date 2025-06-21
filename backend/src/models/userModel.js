@@ -16,13 +16,13 @@ class UserModel {
   }
 
   static async create(userData) {
-    const { nombre, correo, contraseña } = userData;
+    const { nombre, correo, contrasena } = userData;
     try {
-      // Encriptar contraseña
-      const hashedPassword = await bcrypt.hash(contraseña, 10);
+      // Encriptar contrasena
+      const hashedPassword = await bcrypt.hash(contrasena, 10);
       
       const [result] = await pool.execute(
-        'INSERT INTO Usuario (nombre, correo, contraseña) VALUES (?, ?, ?)',
+        'INSERT INTO Usuario (nombre, correo, contrasena) VALUES (?, ?, ?)',
         [nombre, correo, hashedPassword]
       );
       

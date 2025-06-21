@@ -1,0 +1,6 @@
+lista de paginas para mejorar imagenes
+https://openaccess.thecvf.com/content/CVPR2024/papers/Yu_Scaling_Up_to_Excellence_Practicing_Model_Scaling_for_Photo-Realistic_Image_CVPR_2024_paper.pdf
+https://github.com/JyChen9811/FaithDiff/blob/main/test.py (SUPIR (CVPR 2024))
+https://github.com/Fanghua-Yu/SUPIR/blob/master/assets/teaser.png (FaithDiff (CVPR 2025))
+https://github.com/claudiom4sir/StableVSR?tab=readme-ov-file (StableVSR (ECCV 2024-video))
+

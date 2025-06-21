@@ -1,20 +1,20 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import {
-  Container,
-  Box,
-  Typography,
-  TextField,
-  Button,
-  Alert,
-  Paper,
-  IconButton,
-  InputAdornment,
-} from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import { motion } from 'framer-motion';
+import {
+    Alert,
+    Box,
+    Button,
+    Container,
+    IconButton,
+    InputAdornment,
+    Paper,
+    TextField,
+    Typography,
+} from '@mui/material';
 import { useFormik } from 'formik';
+import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import * as Yup from 'yup';
 import api from '../config/api';
 
@@ -25,12 +25,12 @@ const validationSchema = Yup.object({
   correo: Yup.string()
     .email('Ingresa un correo electrónico válido')
     .required('El correo es requerido'),
-  contraseña: Yup.string()
-    .min(6, 'La contraseña debe tener al menos 6 caracteres')
-    .required('La contraseña es requerida'),
-  confirmarContraseña: Yup.string()
-    .oneOf([Yup.ref('contraseña')], 'Las contraseñas no coinciden')
-    .required('Confirma tu contraseña'),
+  contrasena: Yup.string()
+    .min(6, 'La contrasena debe tener al menos 6 caracteres')
+    .required('La contrasena es requerida'),
+  confirmarContrasena: Yup.string()
+    .oneOf([Yup.ref('contrasena')], 'Las contrasenas no coinciden')
+    .required('Confirma tu contrasena'),
 });
 
 // Componente para las figuras de fondo
@@ -95,8 +95,8 @@ const Register = () => {
     initialValues: {
       nombre: '',
       correo: '',
-      contraseña: '',
-      confirmarContraseña: '',
+      contrasena: '',
+      confirmarContrasena: '',
     },
     validationSchema,
     onSubmit: async (values) => {
@@ -105,7 +105,7 @@ const Register = () => {
         const response = await api.post('/auth/register', {
           nombre: values.nombre,
           correo: values.correo,
-          contraseña: values.contraseña,
+          contrasena: values.contrasena,
         });
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -268,59 +268,55 @@ const Register = () => {
               <TextField
                 margin="normal"
                 fullWidth
-                id="contraseña"
-                name="contraseña"
-                label="Contraseña"
+                id="contrasena"
+                name="contrasena"
+                label="Contrasena"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
-                value={formik.values.contraseña}
+                value={formik.values.contrasena}
                 onChange={formik.handleChange}
-                error={formik.touched.contraseña && Boolean(formik.errors.contraseña)}
-                helperText={formik.touched.contraseña && formik.errors.contraseña}
+                error={formik.touched.contrasena && Boolean(formik.errors.contrasena)}
+                helperText={formik.touched.contrasena && formik.errors.contrasena}
+                sx={textFieldStyles}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
-                        aria-label="toggle password visibility"
                         onClick={() => setShowPassword(!showPassword)}
                         edge="end"
-                        sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
                       >
                         {showPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
                     </InputAdornment>
                   ),
                 }}
-                sx={textFieldStyles}
               />
 
               <TextField
                 margin="normal"
                 fullWidth
-                id="confirmarContraseña"
-                name="confirmarContraseña"
-                label="Confirmar Contraseña"
+                id="confirmarContrasena"
+                name="confirmarContrasena"
+                label="Confirmar Contrasena"
                 type={showConfirmPassword ? 'text' : 'password'}
                 autoComplete="new-password"
-                value={formik.values.confirmarContraseña}
+                value={formik.values.confirmarContrasena}
                 onChange={formik.handleChange}
-                error={formik.touched.confirmarContraseña && Boolean(formik.errors.confirmarContraseña)}
-                helperText={formik.touched.confirmarContraseña && formik.errors.confirmarContraseña}
+                error={formik.touched.confirmarContrasena && Boolean(formik.errors.confirmarContrasena)}
+                helperText={formik.touched.confirmarContrasena && formik.errors.confirmarContrasena}
+                sx={textFieldStyles}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
-                        aria-label="toggle password visibility"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                         edge="end"
-                        sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
                       >
                         {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
                     </InputAdornment>
                   ),
                 }}
-                sx={textFieldStyles}
               />
 
               <Button

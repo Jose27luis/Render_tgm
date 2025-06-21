@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-multipart
+numpy
+opencv-python
+pillow
+torch>=1.7
+torchvision
+realesrgan
+basicsr
+facexlib
+gfpgan 

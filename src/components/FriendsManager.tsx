@@ -1,41 +1,41 @@
-import React, { useState, useEffect } from 'react';
 import {
+  Check as CheckIcon,
+  Close as CloseIcon,
+  People as PeopleIcon,
+  PersonAdd as PersonAddIcon,
+  Search as SearchIcon,
+} from "@mui/icons-material";
+import {
+  Avatar,
+  Badge,
   Box,
-  Typography,
-  TextField,
   Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
   List,
   ListItem,
   ListItemAvatar,
   ListItemText,
-  Avatar,
-  IconButton,
+  Paper,
   Tab,
   Tabs,
-  Paper,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  CircularProgress,
+  TextField,
   Tooltip,
-  Badge,
-} from '@mui/material';
-import {
-  PersonAdd as PersonAddIcon,
-  Check as CheckIcon,
-  Close as CloseIcon,
-  Search as SearchIcon,
-  People as PeopleIcon,
-} from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import api from '../config/api';
+  Typography,
+} from "@mui/material";
+import { AnimatePresence, motion } from "framer-motion";
+import React, { useEffect, useState } from "react";
+import api from "../config/api";
 
 interface Friend {
   id_usuario: number;
   nombre: string;
   foto_perfil?: string;
-  estado?: 'pendiente' | 'aceptado' | 'rechazado';
+  estado?: "pendiente" | "aceptado" | "rechazado";
 }
 
 interface TabPanelProps {
@@ -61,7 +61,7 @@ function TabPanel(props: TabPanelProps) {
 }
 
 const FriendsManager = () => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Friend[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [pendingRequests, setPendingRequests] = useState<Friend[]>([]);
@@ -76,31 +76,31 @@ const FriendsManager = () => {
 
   const fetchFriends = async () => {
     try {
-      const response = await api.get('/user/friends');
+      const response = await api.get("/friends");
       setFriends(response.data);
     } catch (error) {
-      console.error('Error al obtener amigos:', error);
+      console.error("Error al obtener amigos:", error);
     }
   };
 
   const fetchPendingRequests = async () => {
     try {
-      const response = await api.get('/user/friends/pending');
+      const response = await api.get("/friends/requests");
       setPendingRequests(response.data);
     } catch (error) {
-      console.error('Error al obtener solicitudes pendientes:', error);
+      console.error("Error al obtener solicitudes pendientes:", error);
     }
   };
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-    
+
     setIsLoading(true);
     try {
-      const response = await api.get(`/user/search?query=${searchQuery}`);
+      const response = await api.get(`/friends/search?query=${searchQuery}`);
       setSearchResults(response.data);
     } catch (error) {
-      console.error('Error al buscar usuarios:', error);
+      console.error("Error al buscar usuarios:", error);
     } finally {
       setIsLoading(false);
     }
@@ -108,82 +108,87 @@ const FriendsManager = () => {
 
   const handleSendRequest = async (userId: number) => {
     try {
-      await api.post(`/user/friends/request/${userId}`);
-      setSearchResults(searchResults.map(user => 
-        user.id_usuario === userId 
-          ? { ...user, estado: 'pendiente' } 
-          : user
-      ));
+      await api.post(`/friends/request`, { id_usuario: userId });
+      setSearchResults(
+        searchResults.map((user) =>
+          user.id_usuario === userId ? { ...user, estado: "pendiente" } : user
+        )
+      );
     } catch (error) {
-      console.error('Error al enviar solicitud:', error);
+      console.error("Error al enviar solicitud:", error);
     }
   };
 
   const handleAcceptRequest = async (userId: number) => {
     try {
-      await api.post(`/user/friends/accept/${userId}`);
+      await api.post(`/friends/accept/${userId}`);
       await fetchFriends();
       await fetchPendingRequests();
     } catch (error) {
-      console.error('Error al aceptar solicitud:', error);
+      console.error("Error al aceptar solicitud:", error);
     }
   };
 
   const handleRejectRequest = async (userId: number) => {
     try {
-      await api.post(`/user/friends/reject/${userId}`);
-      setPendingRequests(pendingRequests.filter(req => req.id_usuario !== userId));
+      await api.post(`/friends/reject/${userId}`);
+      setPendingRequests(
+        pendingRequests.filter((req) => req.id_usuario !== userId)
+      );
     } catch (error) {
-      console.error('Error al rechazar solicitud:', error);
+      console.error("Error al rechazar solicitud:", error);
     }
   };
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Paper 
+    <Box sx={{ width: "100%" }}>
+      <Paper
         elevation={3}
         sx={{
-          background: 'rgba(255, 255, 255, 0.05)',
-          backdropFilter: 'blur(10px)',
+          background: "rgba(255, 255, 255, 0.05)",
+          backdropFilter: "blur(10px)",
           borderRadius: 2,
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          border: "1px solid rgba(255, 255, 255, 0.1)",
         }}
       >
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs 
-            value={tabValue} 
+        <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+          <Tabs
+            value={tabValue}
             onChange={(_, newValue) => setTabValue(newValue)}
             textColor="inherit"
             sx={{
-              '& .MuiTab-root': {
-                color: 'rgba(255, 255, 255, 0.7)',
-                '&.Mui-selected': {
-                  color: 'white',
+              "& .MuiTab-root": {
+                color: "rgba(255, 255, 255, 0.7)",
+                "&.Mui-selected": {
+                  color: "white",
                 },
               },
             }}
           >
-            <Tab 
+            <Tab
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <PeopleIcon />
                   <span>Mis Amigos</span>
                   {friends.length > 0 && (
                     <Badge badgeContent={friends.length} color="primary" />
                   )}
                 </Box>
-              } 
+              }
             />
-            <Tab 
+            <Tab
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <PersonAddIcon />
                   <span>Solicitudes</span>
                   {pendingRequests.length > 0 && (
-                    <Badge badgeContent={pendingRequests.length} color="error" />
+                    <Badge
+                      badgeContent={pendingRequests.length}
+                      color="error"
+                    />
                   )}
                 </Box>
-              } 
+              }
             />
           </Tabs>
         </Box>
@@ -195,8 +200,8 @@ const FriendsManager = () => {
               startIcon={<SearchIcon />}
               onClick={() => setOpenSearch(true)}
               sx={{
-                background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
-                color: 'white',
+                background: "linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)",
+                color: "white",
               }}
             >
               Buscar Amigos
@@ -214,7 +219,7 @@ const FriendsManager = () => {
                 >
                   <ListItem
                     sx={{
-                      bgcolor: 'rgba(255, 255, 255, 0.05)',
+                      bgcolor: "rgba(255, 255, 255, 0.05)",
                       borderRadius: 1,
                       mb: 1,
                     }}
@@ -224,12 +229,10 @@ const FriendsManager = () => {
                         {friend.nombre[0]}
                       </Avatar>
                     </ListItemAvatar>
-                    <ListItemText 
+                    <ListItemText
                       primary={
-                        <Typography color="white">
-                          {friend.nombre}
-                        </Typography>
-                      } 
+                        <Typography color="white">{friend.nombre}</Typography>
+                      }
                     />
                   </ListItem>
                 </motion.div>
@@ -250,7 +253,7 @@ const FriendsManager = () => {
                 >
                   <ListItem
                     sx={{
-                      bgcolor: 'rgba(255, 255, 255, 0.05)',
+                      bgcolor: "rgba(255, 255, 255, 0.05)",
                       borderRadius: 1,
                       mb: 1,
                     }}
@@ -259,8 +262,10 @@ const FriendsManager = () => {
                         <Tooltip title="Aceptar">
                           <IconButton
                             edge="end"
-                            onClick={() => handleAcceptRequest(request.id_usuario)}
-                            sx={{ color: '#4caf50', mr: 1 }}
+                            onClick={() =>
+                              handleAcceptRequest(request.id_usuario)
+                            }
+                            sx={{ color: "#4caf50", mr: 1 }}
                           >
                             <CheckIcon />
                           </IconButton>
@@ -268,8 +273,10 @@ const FriendsManager = () => {
                         <Tooltip title="Rechazar">
                           <IconButton
                             edge="end"
-                            onClick={() => handleRejectRequest(request.id_usuario)}
-                            sx={{ color: '#f44336' }}
+                            onClick={() =>
+                              handleRejectRequest(request.id_usuario)
+                            }
+                            sx={{ color: "#f44336" }}
                           >
                             <CloseIcon />
                           </IconButton>
@@ -282,11 +289,9 @@ const FriendsManager = () => {
                         {request.nombre[0]}
                       </Avatar>
                     </ListItemAvatar>
-                    <ListItemText 
+                    <ListItemText
                       primary={
-                        <Typography color="white">
-                          {request.nombre}
-                        </Typography>
+                        <Typography color="white">{request.nombre}</Typography>
                       }
                     />
                   </ListItem>
@@ -305,15 +310,15 @@ const FriendsManager = () => {
         fullWidth
         PaperProps={{
           sx: {
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(10px)',
+            background: "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(10px)",
             borderRadius: 2,
           },
         }}
       >
         <DialogTitle>Buscar Usuarios</DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', gap: 1, mb: 2, mt: 1 }}>
+          <Box sx={{ display: "flex", gap: 1, mb: 2, mt: 1 }}>
             <TextField
               fullWidth
               value={searchQuery}
@@ -327,7 +332,7 @@ const FriendsManager = () => {
               onClick={handleSearch}
               disabled={isLoading}
               sx={{
-                background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
+                background: "linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)",
               }}
             >
               {isLoading ? <CircularProgress size={24} /> : <SearchIcon />}
@@ -339,27 +344,27 @@ const FriendsManager = () => {
               <ListItem
                 key={user.id_usuario}
                 secondaryAction={
-                  user.estado !== 'aceptado' && (
+                  user.estado !== "aceptado" && (
                     <Button
                       variant="outlined"
                       size="small"
                       startIcon={<PersonAddIcon />}
                       onClick={() => handleSendRequest(user.id_usuario)}
-                      disabled={user.estado === 'pendiente'}
+                      disabled={user.estado === "pendiente"}
                       sx={{
-                        borderColor: user.estado === 'pendiente' ? 'grey.500' : '#2196f3',
-                        color: user.estado === 'pendiente' ? 'grey.500' : '#2196f3',
+                        borderColor:
+                          user.estado === "pendiente" ? "grey.500" : "#2196f3",
+                        color:
+                          user.estado === "pendiente" ? "grey.500" : "#2196f3",
                       }}
                     >
-                      {user.estado === 'pendiente' ? 'Pendiente' : 'Agregar'}
+                      {user.estado === "pendiente" ? "Pendiente" : "Agregar"}
                     </Button>
                   )
                 }
               >
                 <ListItemAvatar>
-                  <Avatar src={user.foto_perfil}>
-                    {user.nombre[0]}
-                  </Avatar>
+                  <Avatar src={user.foto_perfil}>{user.nombre[0]}</Avatar>
                 </ListItemAvatar>
                 <ListItemText primary={user.nombre} />
               </ListItem>
@@ -376,4 +381,4 @@ const FriendsManager = () => {
   );
 };
 
-export default FriendsManager; 
+export default FriendsManager;

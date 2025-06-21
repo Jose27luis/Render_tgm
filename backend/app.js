@@ -2,7 +2,8 @@
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const db = require("./models/db");
+const { pool, testConnection } = require("./src/config/database");
+const { initializeDatabase } = require("./src/config/initDb");
 const adminRoutes = require("./routes/admin");
 require("dotenv").config();
 
@@ -33,14 +34,36 @@ app.use('/uploads', express.static('uploads'));
 app.get("/", (req, res) => {
   res.send("servidor backend activo");
 });
-//arrancamos el servidor
-app.listen(PORT, () => {
-  console.log(`el servidor esta corriendo en http://localhost:${PORT}`);
+
+// Inicializar la base de datos y arrancar el servidor
+async function startServer() {
+  try {
+    // Probar la conexión a la base de datos
+    await testConnection();
+    
+    // Inicializar la base de datos
+    await initializeDatabase();
+    
+    // Arrancar el servidor
+    app.listen(PORT, () => {
+      console.log(`El servidor está corriendo en http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('Error al iniciar el servidor:', error);
+    process.exit(1);
+  }
+}
+
+// Ejemplo de ruta usando el pool de conexiones
+app.get("/usuarios", async (req, res) => {
+  try {
+    const [results] = await pool.query("SELECT * FROM Usuario");
+    res.json(results);
+  } catch (error) {
+    console.error('Error al obtener usuarios:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
 });
 
-app.get("/usuarios", (req, res) => {
-  db.query("SELECT * FROM usuarios", (err, results) => {
-    if (err) return res.status(500).send(err.message);
-    res.json(results);
-  });
-});
+// Iniciar el servidor
+startServer();

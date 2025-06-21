@@ -2,8 +2,8 @@ const { pool } = require('../config/database');
 
 const createAdminRequest = async (req, res) => {
     try {
+        const userId = req.user.id;
         const { reason } = req.body;
-        const userId = req.user.userId;
 
         // Verificar si ya existe una solicitud pendiente
         const [existingRequests] = await pool.execute(
@@ -53,7 +53,7 @@ const handleAdminRequest = async (req, res) => {
         // Actualizar el estado de la solicitud
         await pool.execute(
             'UPDATE SolicitudAdmin SET estado = ?, admin_id = ?, fecha_respuesta = CURRENT_TIMESTAMP WHERE id_solicitud = ?',
-            [action, req.user.userId, requestId]
+            [action, req.user.id, requestId]
         );
 
         // Si la solicitud es aprobada, actualizar el rol del usuario

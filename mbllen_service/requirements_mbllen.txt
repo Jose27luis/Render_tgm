@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+opencv-python
+numpy
+scipy
+keras
+tensorflow==2.15.0
+python-multipart 

@@ -6,9 +6,11 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const imageRoutes = require('./routes/imageRoutes');
 const healthRoutes = require('./routes/healthRoutes');
-const adminRequestRoutes = require('./routes/adminRequestRoutes');
-const { testConnection } = require('./config/database');
-
+const adminRoutes = require('./routes/adminRoutes');
+const friendRoutes = require('./routes/friendRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+const { testConnection, getPool } = require('./config/database');
+require('dotenv').config();
 const app = express();
 
 // Configuración unificada de CORS
@@ -20,8 +22,8 @@ app.use(cors({
 }));
 
 // Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Servir archivos estáticos
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -31,7 +33,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/images', imageRoutes);
 app.use('/api/health', healthRoutes);
-app.use('/api/admin', adminRequestRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/friends', friendRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Ruta de prueba
 app.get('/api/test', (req, res) => {
@@ -42,8 +46,8 @@ app.get('/api/test', (req, res) => {
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
-    message: 'Ha ocurrido un error en el servidor',
-    error: process.env.NODE_ENV === 'development' ? err.message : {}
+    message: 'Error interno del servidor',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
@@ -73,11 +77,14 @@ const startServer = async () => {
     // Probar la conexión a la base de datos antes de iniciar el servidor
     await testConnection();
     
-    app.listen(PORT, "0.0.0.0" , () => {
+    // Obtener el pool para asegurarnos de que está inicializado
+    const pool = await getPool();
+    
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`Servidor corriendo en el puerto ${PORT}`);
     });
   } catch (error) {
-    console.error('Error al iniciar el servidor:', error.message);
+    console.error('Error al iniciar el servidor:', error);
     process.exit(1);
   }
 };

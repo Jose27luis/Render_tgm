@@ -22,7 +22,7 @@ const validationSchema = Yup.object({
   correo: Yup.string()
     .email('Ingresa un correo electrónico válido')
     .required('El correo es requerido'),
-  contraseña: Yup.string()
+  contrasena: Yup.string()
     .min(6, 'La contraseña debe tener al menos 6 caracteres')
     .required('La contraseña es requerida'),
 });
@@ -87,7 +87,7 @@ const Login = () => {
   const formik = useFormik({
     initialValues: {
       correo: '',
-      contraseña: '',
+      contrasena: '',
     },
     validationSchema,
     onSubmit: async (values) => {
@@ -239,15 +239,15 @@ const Login = () => {
               <TextField
                 margin="normal"
                 fullWidth
-                id="contraseña"
-                name="contraseña"
+                id="contrasena"
+                name="contrasena"
                 label="Contraseña"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
-                value={formik.values.contraseña}
+                value={formik.values.contrasena}
                 onChange={formik.handleChange}
-                error={formik.touched.contraseña && Boolean(formik.errors.contraseña)}
-                helperText={formik.touched.contraseña && formik.errors.contraseña}
+                error={formik.touched.contrasena && Boolean(formik.errors.contrasena)}
+                helperText={formik.touched.contrasena && formik.errors.contrasena}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
